@@ -791,4 +791,48 @@ def main() -> None:
 
     # ----------------------------------------------------------------------------------
     # VIEW 4: SUPPLIERS DATABASE
- 
+    # ----------------------------------------------------------------------------------
+    elif choice == "Suppliers Database":
+        render_header("Supplier Marketplace & Strategy Database")
+        st.markdown("Manage supplier tiers (`Strategic`, `Tactical`, `Backup`), SLA scores, and market allocations.")
+
+        if role == "Admin":
+            with st.expander("➕ Add New Supplier"):
+                sub_sup, sup_data = supplier_form("new_supplier", label="Add Supplier", clear=True)
+                if sub_sup:
+                    if not sup_data["name"]:
+                        st.error("Supplier name is required.")
+                    else:
+                        insert_supplier(sup_data)
+                        st.success(f"Supplier '{sup_data['name']}' added successfully!")
+                        st.rerun()
+
+        sup_df = load_suppliers()
+        if sup_df.empty:
+            st.info("No suppliers found.")
+        else:
+            cat_filter = st.selectbox("Filter by Category", ["All"] + SUPPLIER_CATEGORIES)
+            df_s_filtered = sup_df if cat_filter == "All" else sup_df[sup_df["category"] == cat_filter]
+            show_df(df_s_filtered)
+
+            if role == "Admin":
+                st.markdown("### Edit / Remove Suppliers")
+                sup_to_edit = st.selectbox("Select Supplier to Edit", sup_df["name"].tolist())
+                if sup_to_edit:
+                    row_s = sup_df[sup_df["name"] == sup_to_edit].iloc[0]
+                    sid = int(row_s["id"])
+                    with st.form(f"edit_sup_{sid}"):
+                        sub_upd, upd_data = supplier_form(f"form_upd_{sid}", d=row_s.to_dict(), label="Update Supplier")
+                        if sub_upd:
+                            update_supplier(sid, upd_data)
+                            st.success("Supplier updated!")
+                            st.rerun()
+                    if st.button("🗑️ Delete Supplier", key=f"del_sup_{sid}"):
+                        delete_supplier(sid)
+                        st.warning("Supplier deleted.")
+                        st.rerun()
+
+if __name__ == "__main__":
+    main()
+   
+   
