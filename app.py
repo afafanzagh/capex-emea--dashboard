@@ -472,7 +472,7 @@ def kpi_card(title: str, value: str, sub: str = "", accent: str = CANARY) -> Non
     )
 
 # ======================================================================================
-# 6. SHARED FORMS & MODALS
+# 6. SHARED FORMS & MODALS (FIXED OUTSIDE EXPANDERS)
 # ======================================================================================
 def project_form(form_key: str, d: dict | None = None, submit_label: str = "Save",
                  allow_status: bool = False, clear: bool = False):
@@ -482,31 +482,31 @@ def project_form(form_key: str, d: dict | None = None, submit_label: str = "Save
         c_opts = ["Select…"] + COUNTRIES
         cur_country = d.get("country")
         c_idx = c_opts.index(cur_country) if cur_country in c_opts else 0
-        country_sel = c1.selectbox("Country *", c_opts, index=c_idx)
+        country_sel = c1.selectbox("Country *", c_opts, index=c_idx, key=f"{form_key}_country")
         other = c1.text_input("Other country (if not listed)",
-                              value=cur_country if cur_country and cur_country not in c_opts else "")
+                              value=cur_country if cur_country and cur_country not in c_opts else "", key=f"{form_key}_other")
         cur_region = d.get("region")
         r_idx = REGIONS.index(cur_region) if cur_region in REGIONS else 0
-        region = c1.selectbox("Region", REGIONS, index=r_idx)
+        region = c1.selectbox("Region", REGIONS, index=r_idx, key=f"{form_key}_region")
 
-        name = c2.text_input("Project name / Site *", value=d.get("project_name", ""))
-        seats = c2.number_input("Number of seats *", min_value=1, step=1, value=int(d.get("seats", 100)))
+        name = c2.text_input("Project name / Site *", value=d.get("project_name", ""), key=f"{form_key}_name")
+        seats = c2.number_input("Number of seats *", min_value=1, step=1, value=int(d.get("seats", 100)), key=f"{form_key}_seats")
         ptype = c2.selectbox("Project type *", PROJECT_TYPES,
-                             index=PROJECT_TYPES.index(d.get("project_type", "Warm Shell")))
-        notes = c3.text_area("Notes / assumptions", value=d.get("notes") or "", height=190)
+                             index=PROJECT_TYPES.index(d.get("project_type", "Warm Shell")), key=f"{form_key}_ptype")
+        notes = c3.text_area("Notes / assumptions", value=d.get("notes") or "", height=190, key=f"{form_key}_notes")
 
         st.markdown("**Spend categories (USD $)**")
         cols = st.columns(5)
         spend = {}
         for col, key in zip(cols, SPEND_KEYS):
             spend[key] = col.number_input(SPEND_LABELS[key], min_value=0.0, step=1000.0, format="%.0f",
-                                         value=float(d.get(key, 0.0)))
+                                         value=float(d.get(key, 0.0)), key=f"{form_key}_{key}")
         status = d.get("status", "Pending")
         if allow_status:
-            status = st.selectbox("Status", PROJECT_STATUSES, index=PROJECT_STATUSES.index(status))
+            status = st.selectbox("Status", PROJECT_STATUSES, index=PROJECT_STATUSES.index(status), key=f"{form_key}_status")
         files = st.file_uploader(
             f"📎 Attach supporting quotes / PDFs / Excel (max {MAX_UPLOAD_MB} MB each)",
-            type=ALLOWED_UPLOADS, accept_multiple_files=True)
+            type=ALLOWED_UPLOADS, accept_multiple_files=True, key=f"{form_key}_files")
         submitted = st.form_submit_button(submit_label)
 
     data = {
@@ -537,16 +537,16 @@ def supplier_form(form_key: str, d: dict | None = None, label: str = "Save suppl
     d = d or {}
     with st.form(form_key, clear_on_submit=clear):
         c1, c2, c3 = st.columns(3)
-        name = c1.text_input("Supplier name *", value=d.get("name", ""))
-        market = c1.text_input("Market / country code", value=d.get("market") or "")
+        name = c1.text_input("Supplier name *", value=d.get("name", ""), key=f"{form_key}_name")
+        market = c1.text_input("Market / country code", value=d.get("market") or "", key=f"{form_key}_market")
         category = c2.selectbox("Category *", SUPPLIER_CATEGORIES,
-                                index=SUPPLIER_CATEGORIES.index(d.get("category", SUPPLIER_CATEGORIES[0])))
+                                index=SUPPLIER_CATEGORIES.index(d.get("category", SUPPLIER_CATEGORIES[0])), key=f"{form_key}_cat")
         tier = c2.selectbox("Marketplace Tier *", SUPPLIER_TIERS,
-                            index=SUPPLIER_TIERS.index(d.get("tier", "Strategic")))
+                            index=SUPPLIER_TIERS.index(d.get("tier", "Strategic")), key=f"{form_key}_tier")
         score = c3.number_input("SLA Score (1.0 - 5.0)", min_value=1.0, max_value=5.0, step=0.1,
-                                value=float(d.get("sla_score", 4.0)))
-        active = c3.checkbox("Active supplier", value=bool(d.get("active", True)))
-        notes = st.text_area("Notes", value=d.get("notes") or "")
+                                value=float(d.get("sla_score", 4.0)), key=f"{form_key}_score")
+        active = c3.checkbox("Active supplier", value=bool(d.get("active", True)), key=f"{form_key}_active")
+        notes = st.text_area("Notes", value=d.get("notes") or "", key=f"{form_key}_notes")
         submitted = st.form_submit_button(label)
     data = {
         "name": name.strip(), "category": category, "tier": tier, "market": market.strip(),
@@ -586,14 +586,12 @@ def main() -> None:
     if choice == "Dashboard & KPIs":
         render_header("EMEA Workplace Strategy & CapEx Intelligence")
         
-        # Approved projects only for official dashboard
         df_appr = proj_all[proj_all["status"] == "Approved"]
         
         if df_appr.empty:
             st.warning("⚠️ No approved projects available in the database yet. Switch to Admin mode to approve pending projects.")
             return
 
-        # Sidebar Filters
         st.sidebar.markdown("### 🔍 Global Filters")
         sel_countries = st.sidebar.multiselect("Countries", sorted(df_appr["country"].unique()), default=[])
         sel_types = st.sidebar.multiselect("Project Type", PROJECT_TYPES, default=[])
@@ -611,7 +609,6 @@ def main() -> None:
             st.error("No projects match the selected filter criteria.")
             return
 
-        # Top KPI Cards
         tot_capex = df_f["total_capex"].sum()
         tot_seats = int(df_f["seats"].sum())
         w_cps = tot_capex / max(tot_seats, 1)
@@ -629,7 +626,6 @@ def main() -> None:
 
         st.markdown("<br>", unsafe_allow_html=True)
 
-        # Tabs for analytics
         tab1, tab2, tab3, tab4 = st.tabs(["📊 Cost Per Seat (CPS)", "🏗️ Spend Breakdown", "🌍 Marketplace Analysis", "📥 Export & Reports"])
 
         with tab1:
@@ -696,7 +692,6 @@ def main() -> None:
 
         with tab4:
             st.subheader("Export Reports & Data")
-            st.markdown("Download complete analytics, project details, and vendor databases formatted for executive reporting.")
             excel_data = build_excel(df_f, sup_df)
             st.download_button(
                 label="📥 Download Full Executive Excel Report",
@@ -737,6 +732,9 @@ def main() -> None:
             status_filter = st.selectbox("Filter by Status", ["All", "Pending", "Approved", "Rejected"])
             filtered_p = all_p if status_filter == "All" else all_p[all_p["status"] == status_filter]
 
+            # Use session state to manage which project is currently selected for editing
+            edit_project_id = st.session_state.get("edit_project_id", None)
+
             for _, row in filtered_p.iterrows():
                 pid = int(row["id"])
                 with st.expander(f"[{row['status']}] {row['country']} — {row['project_name']} ({row['seats']} seats, {money(row[SPEND_KEYS].sum())})"):
@@ -751,20 +749,21 @@ def main() -> None:
                     col2.markdown(f"**CPS:** ${cps_val:,.0f}/seat")
                     col2.markdown(f"**RAG Status:** {rag_status(cps_val)}")
 
-                    # Action buttons
-                    bc1, bc2, bc3 = col3.columns(3)
-                    if bc1.button("✅ Approve", key=f"app_{pid}"):
+                    bc1, bc2, bc3, bc4 = col3.columns(4)
+                    if bc1.button("✅", key=f"app_{pid}", help="Approve"):
                         set_project_status(pid, "Approved")
-                        st.success("Project approved!")
+                        st.success("Approved!")
                         st.rerun()
-                    if bc2.button("⏳ Pending", key=f"pend_{pid}"):
+                    if bc2.button("⏳", key=f"pend_{pid}", help="Set Pending"):
                         set_project_status(pid, "Pending")
                         st.rerun()
-                    if bc3.button("❌ Reject", key=f"rej_{pid}"):
+                    if bc3.button("❌", key=f"rej_{pid}", help="Reject"):
                         set_project_status(pid, "Rejected")
                         st.rerun()
+                    if bc4.button("✏️", key=f"edit_btn_{pid}", help="Edit"):
+                        st.session_state["edit_project_id"] = pid
+                        st.rerun()
 
-                    # Attached documents
                     docs = list_attachments(pid)
                     if not docs.empty:
                         st.markdown("**Attached Files:**")
@@ -773,20 +772,31 @@ def main() -> None:
                             blob = get_attachment_blob(aid)
                             st.download_button(f"📥 {doc['filename']}", data=blob, file_name=doc['filename'], key=f"dl_{aid}")
 
-                    # Edit Form expander
-                    with st.form(f"edit_form_{pid}"):
-                        st.markdown("### Edit Project Details")
-                        sub_e, edit_data, new_files = project_form(f"inner_edit_{pid}", d=row.to_dict(), submit_label="Update Project", allow_status=True)
-                        if sub_e:
-                            update_project(pid, edit_data)
-                            if new_files:
-                                save_files(pid, new_files, user=f"{role} User")
-                            st.success("Project updated successfully!")
-                            st.rerun()
-
                     if st.button("🗑️ Delete Project", key=f"del_{pid}"):
                         delete_project(pid)
                         st.warning("Project deleted.")
+                        st.rerun()
+
+            # Render edit form outside of the expanders loop to prevent nesting errors
+            if edit_project_id:
+                st.divider()
+                st.subheader(f"✏️ Editing Project ID: {edit_project_id}")
+                row_to_edit = all_p[all_p["id"] == edit_project_id]
+                if not row_to_edit.empty:
+                    r_dict = row_to_edit.iloc[0].to_dict()
+                    sub_e, edit_data, new_files = project_form(f"inner_edit_{edit_project_id}", d=r_dict, submit_label="Update Project", allow_status=True)
+                    
+                    col_cancel, _ = st.columns([1, 5])
+                    if col_cancel.button("Cancel Editing"):
+                        st.session_state.pop("edit_project_id", None)
+                        st.rerun()
+
+                    if sub_e:
+                        update_project(edit_project_id, edit_data)
+                        if new_files:
+                            save_files(edit_project_id, new_files, user=f"{role} User")
+                        st.session_state.pop("edit_project_id", None)
+                        st.success("Project updated successfully!")
                         st.rerun()
 
     # ----------------------------------------------------------------------------------
