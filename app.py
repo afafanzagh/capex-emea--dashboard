@@ -14,7 +14,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 # ======================================================================================
-# 0. PAGE CONFIG (must be the first Streamlit call)
+# 0. PAGE CONFIG
 # ======================================================================================
 st.set_page_config(
     page_title="Concentrix EMEA · CapEx & CPS Tracker",
@@ -308,68 +308,4 @@ def list_attachments(pid: int) -> pd.DataFrame:
             "SELECT id, filename, mime, size_bytes, uploaded_by, uploaded_at FROM attachments "
             "WHERE project_id=? ORDER BY id", c, params=[pid])
 
-def get_attachment_blob(aid: int) -> bytes:
-    with db() as c:
-        return c.execute("SELECT data FROM attachments WHERE id=?", (aid,)).fetchone()[0]
-
-def delete_attachment(aid: int) -> None:
-    with db() as c:
-        c.execute("DELETE FROM attachments WHERE id=?", (aid,))
-
-def load_suppliers() -> pd.DataFrame:
-    with db() as c:
-        df = pd.read_sql_query("SELECT * FROM suppliers ORDER BY id", c)
-    df["active"] = df["active"].astype(bool)
-    return df
-
-def insert_supplier(d: dict) -> None:
-    ts = now_iso()
-    with db() as c:
-        c.execute(
-            "INSERT INTO suppliers (name, category, tier, market, sla_score, active, notes, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
-            (d["name"], d["category"], d["tier"], d["market"], d["sla_score"], int(d["active"]), d["notes"], ts, ts))
-
-def update_supplier(sid: int, d: dict) -> None:
-    with db() as c:
-        c.execute(
-            "UPDATE suppliers SET name=?, category=?, tier=?, market=?, sla_score=?, active=?, notes=?, "
-            "updated_at=? WHERE id=?",
-            (d["name"], d["category"], d["tier"], d["market"], d["sla_score"], int(d["active"]), d["notes"],
-             now_iso(), sid))
-
-def delete_supplier(sid: int) -> None:
-    with db() as c:
-        c.execute("DELETE FROM suppliers WHERE id=?", (sid,))
-
-# ======================================================================================
-# 4. ANALYTICS HELPERS
-# ======================================================================================
-def enrich(df: pd.DataFrame) -> pd.DataFrame:
-    df = df.copy()
-    df["total_capex"] = df[SPEND_KEYS].sum(axis=1)
-    df["cps"] = df["total_capex"] / df["seats"]
-    df["rag"] = df["cps"].apply(rag_status)
-    df["label"] = df["country"] + " – " + df["project_name"]
-    return df
-
-def country_summary(df: pd.DataFrame) -> pd.DataFrame:
-    g = df.groupby("country", as_index=False).agg(
-        projects=("id", "count"), seats=("seats", "sum"), total_capex=("total_capex", "sum"),
-        **{k: (k, "sum") for k in SPEND_KEYS})
-    g["cps"] = g["total_capex"] / g["seats"]
-    g["vs_target_pct"] = (g["cps"] / CPS_TARGET - 1) * 100
-    g["rag"] = g["cps"].apply(rag_status)
-    return g.sort_values("cps").reset_index(drop=True)
-
-def spend_long(df: pd.DataFrame, by: str) -> pd.DataFrame:
-    g = df.groupby(by, as_index=False)[SPEND_KEYS].sum()
-    long = g.melt(id_vars=by, var_name="key", value_name="amount")
-    long["Category"] = long["key"].map(SPEND_LABELS)
-    long["share"] = long["amount"] / long.groupby(by)["amount"].transform("sum").replace(0, pd.NA) * 100
-    long["share"] = long["share"].fillna(0).astype(float)
-    return long
-
-def build_excel(proj: pd.DataFrame, sup: pd.DataFrame) -> bytes:
-    rename = {**SPEND_LABELS, "country": "Country", "region": "Region", "project_name": "Project",
-              "seats": "Seats
+def
