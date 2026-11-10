@@ -251,8 +251,8 @@ def init_db() -> None:
             ts = now_iso()
             c.executemany(
                 """INSERT INTO suppliers (name, category, tier, market, sla_score, active, notes,
-                   created_at, updated_at) VALUES (?,?,?,?,?,1,?,?,?)""",
-                [(n, cat, t, m, s, "Seed data", ts, ts) for n, cat, t, m, s in SEED_SUPPLIERS],
+                   created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)""",
+                [(n, cat, t, m, s, 1, "Seed data", ts, ts) for n, cat, t, m, s in SEED_SUPPLIERS],
             )
 
 def load_projects(status: str | None = None) -> pd.DataFrame:
@@ -419,6 +419,125 @@ def inject_css() -> None:
         .cx-sub {{ font-size:.82rem; letter-spacing:.14em; text-transform:uppercase; opacity:.9; margin-top:6px; }}
         .cx-title {{ font-size:1.25rem; font-weight:600; text-align:right; }}
         .cx-title small {{ display:block; font-weight:400; opacity:.85; font-size:.8rem; }}
-        .kpi {{ background:#fff; border-radius:12px; padding:16px
-  
-    
+        .kpi {{ background:#fff; border-radius:12px; padding:16px 18px; border-left:6px solid {CANARY};
+            box-shadow:0 2px 8px rgba(0,45,98,.08); height:100%; }}
+        .kpi-t {{ font-size:.78rem; text-transform:uppercase; letter-spacing:.08em; color:#4A5B6D; font-weight:600; }}
+        .kpi-v {{ font-size:1.9rem; font-weight:800; color:{NAVY}; line-height:1.2; }}
+        .kpi-s {{ font-size:.82rem; color:#4A5B6D; }}
+        div.stButton > button, div.stFormSubmitButton > button, div.stDownloadButton > button {{
+            background:{NAVY}; color:#fff !important; border:none; border-radius:8px; font-weight:600; }}
+        div.stButton > button p, div.stFormSubmitButton > button p, div.stDownloadButton > button p {{ color:#fff !important; }}
+        div.stButton > button:hover, div.stFormSubmitButton > button:hover, div.stDownloadButton > button:hover {{
+            background:{CANARY}; color:{NAVY} !important; }}
+        div.stButton > button:hover p, div.stFormSubmitButton > button:hover p,
+        div.stDownloadButton > button:hover p {{ color:{NAVY} !important; }}
+        .stTabs [data-baseweb="tab-list"] {{ gap:6px; }}
+        .stTabs [data-baseweb="tab"] {{ background:#fff; border-radius:8px 8px 0 0; padding:8px 18px;
+            color:{NAVY}; font-weight:600; }}
+        .stTabs [aria-selected="true"] {{ background:{CANARY}; color:{NAVY}; }}
+        div[data-testid="stForm"] {{ background:#fff; border:1px solid #D6E6F2; border-radius:12px; }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def render_header(subtitle: str = "EMEA Procurement & Workplace Strategy") -> None:
+    if LOGO_PATH.exists():
+        c1, c2 = st.columns([1, 4])
+        c1.image(str(LOGO_PATH), width=190)
+        c2.markdown(f"<h2 style='margin:0'>{html.escape(subtitle)}</h2>", unsafe_allow_html=True)
+        return
+    st.markdown(
+        f"""<div class="cx-banner">
+             <div><div class="cx-logo">concentrix<span class="dot"></span></div>
+                  <div class="cx-sub">{html.escape(subtitle)}</div></div>
+             <div class="cx-title">CapEx &amp; Cost-Per-Seat Tracker
+                  <small>Annual CapEx Review · FY2026 · USD</small></div>
+       </div>""",
+        unsafe_allow_html=True,
+    )
+
+def kpi_card(title: str, value: str, sub: str = "", accent: str = CANARY) -> None:
+    st.markdown(
+        f'<div class="kpi" style="border-left-color:{accent}"><div class="kpi-t">{title}</div>'
+        f'<div class="kpi-v">{value}</div><div class="kpi-s">{sub}</div></div>',
+        unsafe_allow_html=True,
+    )
+
+# ======================================================================================
+# 6. SHARED FORMS & MODALS
+# ======================================================================================
+def project_form(form_key: str, d: dict | None = None, submit_label: str = "Save",
+                 allow_status: bool = False, clear: bool = False):
+    d = d or {}
+    with st.form(form_key, clear_on_submit=clear):
+        c1, c2, c3 = st.columns(3)
+        c_opts = ["Select…"] + COUNTRIES
+        cur_country = d.get("country")
+        c_idx = c_opts.index(cur_country) if cur_country in c_opts else 0
+        country_sel = c1.selectbox("Country *", c_opts, index=c_idx, key=f"{form_key}_country")
+        other = c1.text_input("Other country (if not listed)",
+                              value=cur_country if cur_country and cur_country not in c_opts else "", key=f"{form_key}_other")
+        cur_region = d.get("region")
+        r_idx = REGIONS.index(cur_region) if cur_region in REGIONS else 0
+        region = c1.selectbox("Region", REGIONS, index=r_idx, key=f"{form_key}_region")
+
+        name = c2.text_input("Project name / Site *", value=d.get("project_name", ""), key=f"{form_key}_name")
+        seats = c2.number_input("Number of seats *", min_value=1, step=1, value=int(d.get("seats", 100)), key=f"{form_key}_seats")
+        ptype = c2.selectbox("Project type *", PROJECT_TYPES,
+                            index=PROJECT_TYPES.index(d.get("project_type", "Warm Shell")), key=f"{form_key}_ptype")
+        notes = c3.text_area("Notes / assumptions", value=d.get("notes") or "", height=190, key=f"{form_key}_notes")
+
+        st.markdown("**Spend categories (USD $)**")
+        cols = st.columns(5)
+        spend = {}
+        for col, key in zip(cols, SPEND_KEYS):
+            spend[key] = col.number_input(SPEND_LABELS[key], min_value=0.0, step=1000.0, format="%.0f",
+                                         value=float(d.get(key, 0.0)), key=f"{form_key}_{key}")
+        status = d.get("status", "Pending")
+        if allow_status:
+            status = st.selectbox("Status", PROJECT_STATUSES, index=PROJECT_STATUSES.index(status), key=f"{form_key}_status")
+        files = st.file_uploader(
+            f"📎 Attach supporting quotes / PDFs / Excel (max {MAX_UPLOAD_MB} MB each)",
+            type=ALLOWED_UPLOADS, accept_multiple_files=True, key=f"{form_key}_files")
+        submitted = st.form_submit_button(submit_label)
+
+    data = {
+        "country": (other.strip() or (country_sel if country_sel != "Select…" else "")),
+        "region": region, "project_name": name.strip(), "seats": int(seats), "project_type": ptype,
+        **{k: float(v) for k, v in spend.items()}, "notes": notes.strip(), "status": status,
+    }
+    return submitted, data, files
+
+def validate_project(d: dict) -> list[str]:
+    errs = []
+    if not d["country"]:
+        errs.append("Please select (or type) a country.")
+    if not d["project_name"]:
+        errs.append("Project name / site is required.")
+    if d["seats"] < 1:
+        errs.append("Number of seats must be at least 1.")
+    if sum(d[k] for k in SPEND_KEYS) <= 0:
+        errs.append("Enter at least one spend category greater than 0.")
+    return errs
+
+def project_result_msg(d: dict) -> str:
+    total = sum(d[k] for k in SPEND_KEYS)
+    cps = total / d["seats"]
+    return f"Total CapEx {money(total)} · CPS ${cps:,.0f}/seat · {RAG_ICONS[rag_status(cps)]}"
+
+def supplier_form(form_key: str, d: dict | None = None, label: str = "Save supplier", clear: bool = False):
+    d = d or {}
+    with st.form(form_key, clear_on_submit=clear):
+        c1, c2, c3 = st.columns(3)
+        name = c1.text_input("Supplier name *", value=d.get("name", ""), key=f"{form_key}_name")
+        market = c1.text_input("Market / country code", value=d.get("market") or "", key=f"{form_key}_market")
+        category = c2.selectbox("Category *", SUPPLIER_CATEGORIES,
+                                index=SUPPLIER_CATEGORIES.index(d.get("category", SUPPLIER_CATEGORIES[0])), key=f"{form_key}_cat")
+        tier = c2.selectbox("Marketplace Tier *", SUPPLIER_TIERS,
+                            index=SUPPLIER_TIERS.index(d.get("tier", "Strategic")), key=f"{form_key}_tier")
+        score = c3.number_input("SLA Score (1.0 - 5.0)", min_value=1.0, max_value=5.0, step=0.1,
+                                value=float(d.get("sla_score", 4.0)), key=f"{form_key}_score")
+        active = c3.checkbox("Active supplier", value=bool(d.get("active
+ 
+      
