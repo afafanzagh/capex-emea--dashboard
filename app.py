@@ -340,7 +340,7 @@ def delete_supplier(sid: int) -> None:
         c.execute("DELETE FROM suppliers WHERE id=?", (sid,))
 
 # ======================================================================================
-# 4. ANALYTICS & RECOMMENDATION HELPERS
+# 4. ANALYTICS & RECOMMENDATION HELPERS (ENGLISH)
 # ======================================================================================
 def enrich(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -370,23 +370,22 @@ def spend_long(df: pd.DataFrame, by: str) -> pd.DataFrame:
     return long
 
 def generate_project_recommendation(row) -> str:
-    """Génère des recommandations expertes et data-driven pour chaque projet."""
+    """Generates expert data-driven recommendations for each project in English."""
     cps = row["cps"]
     ptype = row["project_type"]
     recs = []
     
     if cps > CPS_TARGET:
-        recs.append("🚨 **Dépassement du benchmark ($5,000/siège) :** Lancer un audit immédiat sur les lots d'infrastructure et négocier une contribution foncière (Landlord Fit-out Contribution).")
+        recs.append("🚨 **Benchmark Exceeded ($5,000/seat):** Launch an immediate audit on infrastructure packages and negotiate landlord fit-out contributions.")
     elif cps <= CPS_BEST:
-        recs.append("🟢 **Performance Best-in-Class :** Modèle de coût optimal. Documenter les bonnes pratiques de ce site pour duplication sur les futurs déploiements EMEA.")
+        recs.append("🟢 **Best-in-Class Performance:** Optimal cost model. Document best practices from this site to replicate across future EMEA deployments.")
     else:
-        recs.append("🟡 **Conforme aux objectifs :** Maintenir le suivi budgétaire strict via le tableau de bord CAPEX.")
+        recs.append("🟡 **On Target:** Maintain rigorous budget tracking via the CAPEX dashboard.")
 
-    # Analyse par type de projet
     if ptype == "Grey Shell":
-        recs.append("🏗️ **Spécificité Grey Shell :** Risque élevé sur les lots 'Civil Works' et 'HVAC'. Exiger a minima 3 devis comparatifs concurrentiels avant l'attribution des marchés de gros œuvre.")
+        recs.append("🏗️ **Grey Shell Specificity:** High exposure on 'Civil Works' and 'HVAC' lots. Require a minimum of 3 competitive bids before awarding heavy structural packages.")
     else:
-        recs.append("🛋️ **Spécificité Warm Shell :** Optimiser les lots ameublement (Furniture) en privilégiant le recours aux fournisseurs stratégiques locaux accrédités pour réduire les coûts logistiques.")
+        recs.append("🛋️ **Warm Shell Specificity:** Optimize 'Furniture' expenses by leveraging local accredited strategic vendors to reduce logistics overhead.")
 
     return " \n- ".join(recs)
 
@@ -577,7 +576,7 @@ def supplier_form(form_key: str, d: dict | None = None, label: str = "Save suppl
     return submitted, data
 
 # ======================================================================================
-# 7. MAIN APP VIEWS
+# 7. MAIN APP VIEWS (ENGLISH)
 # ======================================================================================
 def main() -> None:
     init_db()
@@ -596,7 +595,7 @@ def main() -> None:
      
     choice = st.sidebar.radio("Navigation", menu_options)
     st.sidebar.divider()
-    st.sidebar.info("💡 **Tip:** Utilisez les filtres globaux de région et de type de projet pour affiner l'analyse.")
+    st.sidebar.info("💡 **Tip:** Use the global region and project type filters to refine your analysis.")
 
     # Load Data
     proj_all = enrich(load_projects())
@@ -614,7 +613,7 @@ def main() -> None:
             st.warning("⚠️ No approved projects available in the database yet. Switch to Admin mode to approve pending projects.")
             return
 
-        # Filtres Sidebar (Région, Type de projet, Pays)
+        # Sidebar Global Filters
         st.sidebar.markdown("### 🔍 Global Filters")
         sel_regions = st.sidebar.multiselect("Regions", sorted(df_appr["region"].dropna().unique()), default=[])
         sel_types = st.sidebar.multiselect("Project Type", PROJECT_TYPES, default=[])
@@ -638,13 +637,12 @@ def main() -> None:
         tot_seats = int(df_f["seats"].sum())
         w_cps = tot_capex / max(tot_seats, 1)
 
-        # Calcul Market Coverage & Spend above benchmark
         active_markets = df_f["country"].nunique()
         total_markets_emea = len(COUNTRIES)
         above_target_count = len(df_f[df_f["cps"] > CPS_TARGET])
         above_target_spend = df_f[df_f["cps"] > CPS_TARGET]["total_capex"].sum()
 
-        # KPIs inspirés de votre maquette HTML
+        # KPI Cards (English)
         c1, c2, c3, c4 = st.columns(4)
         with c1:
             kpi_card("EMEA Average Cost / Seat", f"${w_cps:,.0f}", f"Target: ≤ ${CPS_TARGET:,}", accent=GREEN if w_cps <= CPS_TARGET else RED)
@@ -704,22 +702,22 @@ def main() -> None:
             show_fig(fig_pct)
 
         with tab3:
-            st.subheader("💡 Recommandations Personnalisées par Projet")
-            st.markdown("Analyse croisée des coûts, du type de projet et plans d'action associés :")
+            st.subheader("💡 Personalized Project Recommendations")
+            st.markdown("Cross-analysis of costs, project type, and recommended action plans:")
             
             for _, row in df_f.iterrows():
                 with st.expander(f"📌 {row['country']} – {row['project_name']} | Type: {row['project_type']} | CPS: ${row['cps']:,.0f}"):
                     col_a, col_b = st.columns([1, 2])
                     with col_a:
                         st.metric("Total CapEx", money(row['total_capex']))
-                        st.metric("Sièges", f"{row['seats']:,}")
-                        st.markdown(f"**Statut RAG :** {RAG_ICONS[row['rag']]}")
+                        st.metric("Seats", f"{row['seats']:,}")
+                        st.markdown(f"**RAG Status:** {RAG_ICONS[row['rag']]}")
                     with col_b:
-                        st.markdown("#### 🎯 Recommandations Stratégiques :")
+                        st.markdown("#### 🎯 Strategic Recommendations:")
                         recs = generate_project_recommendation(row)
                         st.markdown(recs)
                         if row["notes"]:
-                            st.info(f"**Notes du projet :** {row['notes']}")
+                            st.info(f"**Project Notes:** {row['notes']}")
 
         with tab4:
             st.subheader("Supplier Marketplace & Vendor Strategy")
@@ -728,16 +726,20 @@ def main() -> None:
             else:
                 sc1, sc2 = st.columns(2)
                 with sc1:
-                    fig_tier = px.pie(
-                        sup_df, names="tier", color="tier",
-                        color_discrete_map=TIER_COLORS, title="Suppliers by Marketplace Tier"
+                    # Histogram for Supplier Tiers (Strategic, Tactical, Backup)
+                    tier_counts = sup_df.groupby("tier", as_index=False).size()
+                    fig_tier = px.bar(
+                        tier_counts, x="tier", y="size", color="tier",
+                        color_discrete_map=TIER_COLORS, title="Suppliers by Marketplace Tier",
+                        labels={"tier": "Marketplace Tier", "size": "Number of Suppliers"}
                     )
                     show_fig(fig_tier, height=350)
                 with sc2:
                     fig_cat = px.bar(
                         sup_df.groupby("category", as_index=False).size(),
                         x="category", y="size", color="category",
-                        title="Active Suppliers by Category"
+                        title="Active Suppliers by Category",
+                        labels={"category": "Category", "size": "Number of Suppliers"}
                     )
                     show_fig(fig_cat, height=350)
 
@@ -760,7 +762,7 @@ def main() -> None:
     # ----------------------------------------------------------------------------------
     elif choice == "Submit New Project":
         render_header("Submit New Project Proposal")
-        st.markdown("Renseignez ci-dessous toutes les informations requises pour soumettre un nouveau projet d'aménagement aux équipes achats EMEA.")
+        st.markdown("Fill out all required information below to submit a new fit-out project for EMEA procurement approval.")
         
         submitted, data, files = project_form("submit_new", submit_label="Submit for Approval", clear=True)
         if submitted:
@@ -826,3 +828,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+ 
+  
