@@ -59,10 +59,10 @@ SPEND_COLORS = {
 
 PROJECT_TYPES = ["Warm Shell", "Grey Shell"]
 PROJECT_STATUSES = ["Approved", "Pending", "Rejected"]
-REGIONS = ["French Region", "MET Region", "UK Region", "DACH", "MLH & NorBal", "Netherlands", "Other"]
+REGIONS = ["French Region", "MET Region", "UK Region", "DACH", "MLH & NorBal", "Netherlands", "Other", "Iberia", "Italy"]
 COUNTRIES = sorted([
     "Albania", "Benin", "Bulgaria", "Egypt", "France", "Germany", "Ghana", "Greece", "Ireland",
-    "Kosovo", "Latvia", "Madagascar", "Morocco", "Netherlands", "Nigeria", "Poland", "Portugal",
+    "Italy", "Kosovo", "Latvia", "Madagascar", "Morocco", "Netherlands", "Nigeria", "Poland", "Portugal",
     "Romania", "Senegal", "South Africa", "Spain", "Suriname", "Tunisia", "Turkey", "United Kingdom",
 ])
 SUPPLIER_CATEGORIES = ["Cabling/Electrical", "HVAC", "Civil Works", "Furniture", "Security/CCTV"]
@@ -248,8 +248,8 @@ def init_db() -> None:
             ts = now_iso()
             c.executemany(
                 """INSERT INTO suppliers (name, category, tier, market, sla_score, active, notes,
-                   created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?)""",
-                [(n, cat, t, m, s, 1, "Seed data", ts, ts) for n, cat, t, m, s in SEED_SUPPLIERS],
+                   created_at, updated_at) VALUES (?,?,?,?,?,1,?,?,?)""",
+                [(n, cat, t, m, s, "Seed data", ts, ts) for n, cat, t, m, s in SEED_SUPPLIERS],
             )
 
 def load_projects(status: str | None = None) -> pd.DataFrame:
@@ -340,7 +340,7 @@ def delete_supplier(sid: int) -> None:
         c.execute("DELETE FROM suppliers WHERE id=?", (sid,))
 
 # ======================================================================================
-# 4. ANALYTICS HELPERS
+# 4. ANALYTICS & RECOMMENDATION HELPERS
 # ======================================================================================
 def enrich(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -369,22 +369,35 @@ def spend_long(df: pd.DataFrame, by: str) -> pd.DataFrame:
     long["share"] = long["share"].fillna(0).astype(float)
     return long
 
+def generate_project_recommendation(row) -> str:
+    """Génère des recommandations expertes et data-driven pour chaque projet."""
+    cps = row["cps"]
+    ptype = row["project_type"]
+    recs = []
+    
+    if cps > CPS_TARGET:
+        recs.append("🚨 **Dépassement du benchmark ($5,000/siège) :** Lancer un audit immédiat sur les lots d'infrastructure et négocier une contribution foncière (Landlord Fit-out Contribution).")
+    elif cps <= CPS_BEST:
+        recs.append("🟢 **Performance Best-in-Class :** Modèle de coût optimal. Documenter les bonnes pratiques de ce site pour duplication sur les futurs déploiements EMEA.")
+    else:
+        recs.append("🟡 **Conforme aux objectifs :** Maintenir le suivi budgétaire strict via le tableau de bord CAPEX.")
+
+    # Analyse par type de projet
+    if ptype == "Grey Shell":
+        recs.append("🏗️ **Spécificité Grey Shell :** Risque élevé sur les lots 'Civil Works' et 'HVAC'. Exiger a minima 3 devis comparatifs concurrentiels avant l'attribution des marchés de gros œuvre.")
+    else:
+        recs.append("🛋️ **Spécificité Warm Shell :** Optimiser les lots ameublement (Furniture) en privilégiant le recours aux fournisseurs stratégiques locaux accrédités pour réduire les coûts logistiques.")
+
+    return " \n- ".join(recs)
+
 def build_excel(proj: pd.DataFrame, sup: pd.DataFrame) -> bytes:
     rename = dict(SPEND_LABELS)
     rename.update({
-        "country": "Country",
-        "region": "Region",
-        "project_name": "Project",
-        "seats": "Seats",
-        "project_type": "Project Type",
-        "total_capex": "Total CapEx ($)",
-        "cps": "CPS ($/Seat)",
-        "rag": "RAG",
-        "status": "Status",
-        "notes": "Notes",
+        "country": "Country", "region": "Region", "project_name": "Project",
+        "seats": "Seats", "project_type": "Project Type", "total_capex": "Total CapEx ($)",
+        "cps": "CPS ($/Seat)", "rag": "RAG", "status": "Status", "notes": "Notes",
         "submitted_by": "Submitted By"
     })
-    
     cols = ["id", "country", "region", "project_name", "project_type", "seats"] + SPEND_KEYS + ["total_capex", "cps", "rag", "status", "submitted_by", "notes"]
     
     rename_p = dict(rename)
@@ -401,7 +414,6 @@ def build_excel(proj: pd.DataFrame, sup: pd.DataFrame) -> bytes:
         "Value": [proj["total_capex"].sum(), proj["seats"].sum(),
                   proj["total_capex"].sum() / max(proj["seats"].sum(), 1), CPS_TARGET, len(proj)],
     })
-    
     s = sup.drop(columns=["created_at", "updated_at"], errors="ignore").rename(columns={
         "name": "Supplier", "category": "Category", "tier": "Tier", "market": "Market",
         "sla_score": "SLA Score", "active": "Active", "notes": "Notes", "id": "ID"})
@@ -448,8 +460,6 @@ def inject_css() -> None:
         div.stButton > button p, div.stFormSubmitButton > button p, div.stDownloadButton > button p {{ color:#fff !important; }}
         div.stButton > button:hover, div.stFormSubmitButton > button:hover, div.stDownloadButton > button:hover {{
             background:{CANARY}; color:{NAVY} !important; }}
-        div.stButton > button:hover p, div.stFormSubmitButton > button:hover p,
-        div.stDownloadButton > button:hover p {{ color:{NAVY} !important; }}
         .stTabs [data-baseweb="tab-list"] {{ gap:6px; }}
         .stTabs [data-baseweb="tab"] {{ background:#fff; border-radius:8px 8px 0 0; padding:8px 18px;
             color:{NAVY}; font-weight:600; }}
@@ -484,7 +494,7 @@ def kpi_card(title: str, value: str, sub: str = "", accent: str = CANARY) -> Non
     )
 
 # ======================================================================================
-# 6. SHARED FORMS & MODALS
+# 6. FORMS
 # ======================================================================================
 def project_form(form_key: str, d: dict | None = None, submit_label: str = "Save",
                  allow_status: bool = False, clear: bool = False):
@@ -586,7 +596,7 @@ def main() -> None:
      
     choice = st.sidebar.radio("Navigation", menu_options)
     st.sidebar.divider()
-    st.sidebar.info("💡 **Tip:** Use the filters on each page to refine country, project type, or spend analysis.")
+    st.sidebar.info("💡 **Tip:** Utilisez les filtres globaux de région et de type de projet pour affiner l'analyse.")
 
     # Load Data
     proj_all = enrich(load_projects())
@@ -604,20 +614,21 @@ def main() -> None:
             st.warning("⚠️ No approved projects available in the database yet. Switch to Admin mode to approve pending projects.")
             return
 
+        # Filtres Sidebar (Région, Type de projet, Pays)
         st.sidebar.markdown("### 🔍 Global Filters")
         sel_regions = st.sidebar.multiselect("Regions", sorted(df_appr["region"].dropna().unique()), default=[])
+        sel_types = st.sidebar.multiselect("Project Type", PROJECT_TYPES, default=[])
         
         filtered_by_region = df_appr[df_appr["region"].isin(sel_regions)] if sel_regions else df_appr
         sel_countries = st.sidebar.multiselect("Countries", sorted(filtered_by_region["country"].unique()), default=[])
-        sel_types = st.sidebar.multiselect("Project Type", PROJECT_TYPES, default=[])
 
         df_f = df_appr.copy()
         if sel_regions:
             df_f = df_f[df_f["region"].isin(sel_regions)]
-        if sel_countries:
-            df_f = df_f[df_f["country"].isin(sel_countries)]
         if sel_types:
             df_f = df_f[df_f["project_type"].isin(sel_types)]
+        if sel_countries:
+            df_f = df_f[df_f["country"].isin(sel_countries)]
 
         if df_f.empty:
             st.error("No projects match the selected filter criteria.")
@@ -627,23 +638,29 @@ def main() -> None:
         tot_seats = int(df_f["seats"].sum())
         w_cps = tot_capex / max(tot_seats, 1)
 
+        # Calcul Market Coverage & Spend above benchmark
+        active_markets = df_f["country"].nunique()
+        total_markets_emea = len(COUNTRIES)
+        above_target_count = len(df_f[df_f["cps"] > CPS_TARGET])
+        above_target_spend = df_f[df_f["cps"] > CPS_TARGET]["total_capex"].sum()
+
+        # KPIs inspirés de votre maquette HTML
         c1, c2, c3, c4 = st.columns(4)
         with c1:
-            kpi_card("Total CapEx", money(tot_capex), f"{len(df_f)} projects evaluated")
+            kpi_card("EMEA Average Cost / Seat", f"${w_cps:,.0f}", f"Target: ≤ ${CPS_TARGET:,}", accent=GREEN if w_cps <= CPS_TARGET else RED)
         with c2:
-            kpi_card("Total Seats Delivered", f"{tot_seats:,}", "EMEA Portfolio")
+            kpi_card("Spend Above Benchmark", money(above_target_spend), f"{above_target_count} projects over target")
         with c3:
-            kpi_card("Weighted Avg CPS", f"${w_cps:,.0f}", f"Target: ≤ ${CPS_TARGET:,}", 
-                     accent=GREEN if w_cps <= CPS_TARGET else RED)
+            kpi_card("Projects Alert / Review", f"{above_target_count} projects", "Requiring optimization")
         with c4:
-            kpi_card("CPS Benchmark", f"${CPS_TARGET:,}", "Standard Target", accent=NAVY)
+            kpi_card("Market Coverage", f"{active_markets} of {total_markets_emea}", "Active countries in view")
 
         st.markdown("<br>", unsafe_allow_html=True)
 
         tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "📊 Cost Per Seat (CPS)", 
             "🏗️ Spend Breakdown", 
-            "🏢 Breakdown par Site", 
+            "💡 Project Recommendations",
             "🌍 Marketplace Analysis", 
             "📥 Export & Reports"
         ])
@@ -687,20 +704,22 @@ def main() -> None:
             show_fig(fig_pct)
 
         with tab3:
-            st.subheader("🔍 Breakdown Détaillé par Site / Projet")
-            site_df = df_f[["project_name", "country", "region", "project_type", "seats", "total_capex", "cps", "rag"]].sort_values(by="cps", ascending=False)
-            show_df(site_df)
-
-            fig_site = px.bar(
-                site_df, x="project_name", y="cps", color="rag",
-                color_discrete_map={"Best-in-Class": GREEN, "On Target": AMBER, "Alert": RED},
-                text=site_df["cps"].apply(lambda v: f"${v:,.0f}"),
-                labels={"project_name": "Site / Projet", "cps": "CPS ($ / Seat)"},
-                title="Cost Per Seat (CPS) par Site individuel"
-            )
-            fig_site.add_hline(y=CPS_TARGET, line_dash="dash", line_color=RED, annotation_text="Target $5,000")
-            fig_site.update_traces(textposition="outside")
-            show_fig(fig_site)
+            st.subheader("💡 Recommandations Personnalisées par Projet")
+            st.markdown("Analyse croisée des coûts, du type de projet et plans d'action associés :")
+            
+            for _, row in df_f.iterrows():
+                with st.expander(f"📌 {row['country']} – {row['project_name']} | Type: {row['project_type']} | CPS: ${row['cps']:,.0f}"):
+                    col_a, col_b = st.columns([1, 2])
+                    with col_a:
+                        st.metric("Total CapEx", money(row['total_capex']))
+                        st.metric("Sièges", f"{row['seats']:,}")
+                        st.markdown(f"**Statut RAG :** {RAG_ICONS[row['rag']]}")
+                    with col_b:
+                        st.markdown("#### 🎯 Recommandations Stratégiques :")
+                        recs = generate_project_recommendation(row)
+                        st.markdown(recs)
+                        if row["notes"]:
+                            st.info(f"**Notes du projet :** {row['notes']}")
 
         with tab4:
             st.subheader("Supplier Marketplace & Vendor Strategy")
@@ -741,7 +760,7 @@ def main() -> None:
     # ----------------------------------------------------------------------------------
     elif choice == "Submit New Project":
         render_header("Submit New Project Proposal")
-        st.markdown("Submit a new fit-out project for procurement evaluation and approval.")
+        st.markdown("Renseignez ci-dessous toutes les informations requises pour soumettre un nouveau projet d'aménagement aux équipes achats EMEA.")
         
         submitted, data, files = project_form("submit_new", submit_label="Submit for Approval", clear=True)
         if submitted:
@@ -807,6 +826,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
-  
